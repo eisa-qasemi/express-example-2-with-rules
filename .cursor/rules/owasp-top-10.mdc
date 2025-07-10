@@ -1,0 +1,342 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# OWASP Top 10 Security Rules for Express.js Development
+
+## A01:2021 - Broken Access Control
+- Always implement proper authentication and authorization middleware
+- Use role-based access control (RBAC) for different user types
+- Validate user permissions before accessing resources
+- Implement proper session management with secure cookies
+- Use JWT tokens with appropriate expiration times
+- Never trust client-side validation alone
+
+```javascript
+// Example: Proper authentication middleware
+const authenticate = (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Access denied' });
+  
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+};
+
+// Example: Role-based authorization
+const authorize = (roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    next();
+  };
+};
+```
+
+## A02:2021 - Cryptographic Failures
+- Use HTTPS in production (never HTTP)
+- Store sensitive data encrypted at rest
+- Use strong encryption algorithms (AES-256, RSA-2048)
+- Never store passwords in plain text - use bcrypt with salt rounds >= 12
+- Use environment variables for secrets, never hardcode
+- Implement proper key management and rotation
+
+```javascript
+// Example: Password hashing with bcrypt
+const bcrypt = require('bcrypt');
+const saltRounds = 12;
+
+const hashPassword = async (password) => {
+  return await bcrypt.hash(password, saltRounds);
+};
+
+const verifyPassword = async (password, hash) => {
+  return await bcrypt.compare(password, hash);
+};
+```
+
+## A03:2021 - Injection
+- Use parameterized queries to prevent SQL injection
+- Validate and sanitize all user inputs
+- Use ORM libraries with built-in protection
+- Implement input validation with libraries like Joi or express-validator
+- Escape output to prevent XSS attacks
+- Use Content Security Policy (CSP) headers
+
+```javascript
+// Example: Input validation with express-validator
+const { body, validationResult } = require('express-validator');
+
+const validateUser = [
+  body('email').isEmail().normalizeEmail(),
+  body('password').isLength({ min: 8 }).matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/),
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    next();
+  }
+];
+```
+
+## A04:2021 - Insecure Design
+- Follow secure design principles from the start
+- Implement defense in depth
+- Use secure defaults for all configurations
+- Design APIs with proper error handling
+- Implement rate limiting and request throttling
+- Use secure communication protocols
+
+```javascript
+// Example: Rate limiting with express-rate-limit
+const rateLimit = require('express-rate-limit');
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP'
+});
+
+app.use('/api/', limiter);
+```
+
+## A05:2021 - Security Misconfiguration
+- Remove default accounts and passwords
+- Disable unnecessary features and services
+- Keep frameworks and dependencies updated
+- Use security headers (helmet.js)
+- Configure proper CORS settings
+- Use environment-specific configurations
+
+```javascript
+// Example: Security headers with helmet
+const helmet = require('helmet');
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  }
+}));
+```
+
+## A06:2021 - Vulnerable and Outdated Components
+- Regularly update dependencies (npm audit)
+- Use dependency scanning tools
+- Monitor for security advisories
+- Implement automated security scanning in CI/CD
+- Use package-lock.json for reproducible builds
+- Consider using Snyk or similar tools
+
+```bash
+# Regular security checks
+npm audit
+npm audit fix
+npm outdated
+```
+
+## A07:2021 - Identification and Authentication Failures
+- Implement multi-factor authentication (MFA)
+- Use strong password policies
+- Implement account lockout after failed attempts
+- Use secure session management
+- Implement proper logout functionality
+- Use CAPTCHA for sensitive operations
+
+```javascript
+// Example: Account lockout mechanism
+const loginAttempts = new Map();
+
+const checkLoginAttempts = (req, res, next) => {
+  const ip = req.ip;
+  const attempts = loginAttempts.get(ip) || 0;
+  
+  if (attempts >= 5) {
+    return res.status(429).json({ error: 'Too many login attempts' });
+  }
+  next();
+};
+```
+
+## A08:2021 - Software and Data Integrity Failures
+- Use signed packages and verify integrity
+- Implement CI/CD security checks
+- Use dependency pinning
+- Verify data integrity with checksums
+- Implement secure update mechanisms
+- Use code signing for releases
+
+```javascript
+// Example: Data integrity verification
+const crypto = require('crypto');
+
+const verifyDataIntegrity = (data, expectedHash) => {
+  const actualHash = crypto.createHash('sha256').update(data).digest('hex');
+  return actualHash === expectedHash;
+};
+```
+
+## A09:2021 - Security Logging and Monitoring Failures
+- Implement comprehensive logging
+- Monitor for suspicious activities
+- Use centralized logging (Winston, Bunyan)
+- Implement audit trails for sensitive operations
+- Set up alerts for security events
+- Log security-relevant events
+
+```javascript
+// Example: Security logging with Winston
+const winston = require('winston');
+
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.File({ filename: 'security.log' })
+  ]
+});
+
+// Log security events
+const logSecurityEvent = (event, details) => {
+  logger.info('Security Event', { event, details, timestamp: new Date() });
+};
+```
+
+## A10:2021 - Server-Side Request Forgery (SSRF)
+- Validate and sanitize all URLs
+- Use allowlists for external resources
+- Implement proper URL parsing
+- Use DNS resolution validation
+- Block access to internal networks
+- Implement request timeouts
+
+```javascript
+// Example: SSRF protection
+const url = require('url');
+
+const validateExternalUrl = (inputUrl) => {
+  const parsed = url.parse(inputUrl);
+  const allowedHosts = ['api.example.com', 'cdn.example.com'];
+  
+  if (!allowedHosts.includes(parsed.hostname)) {
+    throw new Error('Invalid hostname');
+  }
+  
+  // Block internal IP ranges
+  const ip = dns.lookupSync(parsed.hostname);
+  if (isPrivateIP(ip)) {
+    throw new Error('Access to private IP blocked');
+  }
+  
+  return inputUrl;
+};
+```
+
+## Express.js Specific Security Rules
+
+### Middleware Security
+- Always use security middleware in the correct order
+- Implement proper error handling middleware
+- Use async/await with proper error catching
+- Validate request size limits
+- Implement request timeout handling
+
+### Session Security
+```javascript
+// Example: Secure session configuration
+const session = require('express-session');
+
+app.use(session({
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 1000 * 60 * 60 * 24, // 24 hours
+    sameSite: 'strict'
+  }
+}));
+```
+
+### CORS Configuration
+```javascript
+// Example: Secure CORS configuration
+const corsOptions = {
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
+```
+
+### Environment Variables
+- Never commit .env files to version control
+- Use different environments (dev, staging, prod)
+- Validate required environment variables on startup
+- Use strong, unique secrets for each environment
+
+### Database Security
+- Use connection pooling
+- Implement proper connection string security
+- Use parameterized queries
+- Implement database access logging
+- Use read-only database users where possible
+
+### API Security
+- Implement proper HTTP status codes
+- Use consistent error response format
+- Implement API versioning
+- Use HTTPS in production
+- Implement proper API documentation
+
+## Security Checklist for New Features
+- [ ] Input validation implemented
+- [ ] Output encoding applied
+- [ ] Authentication required where needed
+- [ ] Authorization checks in place
+- [ ] Rate limiting configured
+- [ ] Error handling implemented
+- [ ] Logging added for security events
+- [ ] Dependencies updated and scanned
+- [ ] Security headers configured
+- [ ] CORS properly configured
+- [ ] Environment variables secured
+- [ ] Database queries parameterized
+- [ ] Session management secure
+- [ ] HTTPS enforced in production
+
+## Recommended Security Libraries
+- helmet: Security headers
+- express-rate-limit: Rate limiting
+- express-validator: Input validation
+- bcrypt: Password hashing
+- jsonwebtoken: JWT handling
+- express-session: Session management
+- cors: CORS configuration
+- winston: Logging
+- joi: Schema validation
+
+
+Remember: Security is not a one-time implementation but an ongoing process. Regularly review and update security measures as threats evolve. 
